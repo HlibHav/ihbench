@@ -1,0 +1,7 @@
+backend: openai-realtime
+model: gpt-realtime-2
+api_key: ${OPENAI_API_KEY}
+reasoning_effort: xhigh
+temperature: 1.0
+max_new_tokens: 4096
+max_workers: 8

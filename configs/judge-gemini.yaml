@@ -1,0 +1,5 @@
+# Second judge for inter-judge agreement analysis
+model: gemini-3-flash-preview
+api_key: ${GEMINI_API_KEY}
+base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+max_concurrent: 20

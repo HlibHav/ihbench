@@ -1,0 +1,29 @@
+backend: hf
+# Cluster-local snapshot (no HF_TOKEN / no ~24 GB re-download per launch).
+model: google/gemma-4-12b-it
+torch_dtype: bfloat16
+device_map: auto
+temperature: 1.0
+max_new_tokens: 4096   # thinking traces are longer; give the answer room after parse_response
+
+# -thinking enables the reasoning block (enable_thinking=True). The client runs
+# processor.parse_response() to strip the <think> trace, so only the final
+# answer reaches the judge.
+client_kwargs:
+  thinking: true
+
+# 12B Unified in bf16: ~24 GB weights, but long-context activations + KV cache
+# OOM a single A100-40GB. Needs 2 GPUs (4-way DP x 2-way TP). See the
+# -nothinking config note; confirmed via smoke test.
+gpus_per_replica: 2
+
+# See gemma4-12b-nothinking.yaml for the dependency rationale.
+dependencies:
+  - "transformers @ git+https://github.com/huggingface/transformers"
+  # Required co-dep: transformers-main's Voxtral integration imports
+  # mistral_common...ReasoningEffort (needs mistral_common>=1.8.5); without it
+  # transformers fails to import and every sample fails. See the -nothinking
+  # config note and the add-hf-model skill pitfalls.
+  - "mistral_common>=1.8.5"
+  - "librosa>=0.10.0"
+  - "accelerate>=1.9.0"

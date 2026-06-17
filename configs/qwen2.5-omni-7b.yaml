@@ -1,0 +1,19 @@
+backend: hf
+# Cluster-local snapshot; avoids ~15 GB HF Hub download per container start.
+model: Qwen/Qwen2.5-Omni-7B
+torch_dtype: bfloat16
+device_map: auto
+temperature: 1.0
+max_new_tokens: 4096
+
+# 7B model in bf16 (~15 GB) fits comfortably on a single A100-40GB.
+# 8-way data parallel = 8 replicas on an 8-GPU node, max throughput.
+gpus_per_replica: 1
+
+# Qwen2.5-Omni's model classes live on a preview tag, not in any stable
+# transformers release. mistral_common pin is the same transitive-dep issue
+# we hit with Qwen3-Omni (transformers main imports ReasoningEffort).
+dependencies:
+  - "transformers @ git+https://github.com/huggingface/transformers@v4.51.3-Qwen2.5-Omni-preview"
+  - "qwen_omni_utils"
+  - "mistral_common>=1.8.5"

@@ -1,0 +1,5 @@
+# Judge model config — used by run_evaluate.py
+model: gpt-5.4-mini
+api_key: ${OPENAI_API_KEY}
+reasoning_effort: high
+max_concurrent: 40

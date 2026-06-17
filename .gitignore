@@ -1,0 +1,14 @@
+# Inference outputs + scored results
+responses/
+results/
+
+# HF audio cache (materialized from the dataset on first run)
+.ihbench_audio_cache/
+
+# Environment
+.env
+__pycache__/
+*.egg-info/
+
+# OMC session state (dev tooling)
+.omc/

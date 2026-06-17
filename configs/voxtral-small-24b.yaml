@@ -1,0 +1,19 @@
+backend: hf
+# Cluster-local snapshot; avoids the ~48 GB Hub download per container start.
+model: mistralai/Voxtral-Small-24B-2507
+torch_dtype: bfloat16
+device_map: auto
+temperature: 1.0
+max_new_tokens: 4096
+
+# 24B in bf16 (~48 GB) does NOT fit on a single A100-40GB.
+# gpus_per_replica=2 → 4 data-parallel replicas × 2-GPU tensor parallel
+# on an 8-GPU node, each model copy spread across 2 GPUs (~24 GB each).
+gpus_per_replica: 2
+
+# Voxtral landed in transformers 4.54. mistral-common's [audio] extra
+# pulls in soundfile + the WAV/MP3 decoders the processor uses to load
+# `{"type": "audio", "path": ...}` paths.
+dependencies:
+  - "transformers>=4.54"
+  - "mistral-common[audio]>=1.8.5"

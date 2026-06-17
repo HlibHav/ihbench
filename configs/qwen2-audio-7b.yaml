@@ -1,0 +1,18 @@
+backend: hf
+# Cluster-local snapshot; avoids ~16 GB Hub download per container start.
+model: Qwen/Qwen2-Audio-7B-Instruct
+torch_dtype: bfloat16
+device_map: auto
+temperature: 1.0
+max_new_tokens: 4096
+
+# 7B model in bf16 (~14 GB) plus audio encoder fits comfortably on one
+# A100-40GB. 8-way data parallel on an 8-GPU node.
+gpus_per_replica: 1
+
+# Qwen2-Audio shipped in transformers 4.32+. The cluster image's bundled
+# version is usually new enough, but pin to a known-good range to be safe.
+# librosa is the audio loader (resamples to processor.feature_extractor.sampling_rate = 16 kHz).
+dependencies:
+  - "transformers>=4.32,<4.52"
+  - "librosa>=0.10.0"

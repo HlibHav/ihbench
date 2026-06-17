@@ -1,0 +1,30 @@
+[project]
+name = "ihbench"
+version = "0.1.0"
+description = "IHBench: Evaluation toolkit for post-interruption recovery in voice agents"
+requires-python = ">=3.10"
+dependencies = [
+    "openai>=1.30",
+    "pydantic>=2.0",
+    "tenacity>=8.0",
+    "python-dotenv>=1.0",
+    "pyyaml>=6.0",
+    "numpy>=1.24",
+    "soundfile>=0.12",
+    "datasets>=3.0",
+    "torchcodec>=0.1",
+]
+
+[project.optional-dependencies]
+gemini = ["google-genai>=1.0"]
+hf = ["transformers>=4.40", "accelerate>=0.30", "torch>=2.0"]
+realtime = ["scipy>=1.10", "websockets>=12.0"]
+api = ["ihbench[gemini,realtime]"]
+all = ["ihbench[gemini,hf,realtime]"]
+
+[tool.setuptools.packages.find]
+include = ["ihbench*"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

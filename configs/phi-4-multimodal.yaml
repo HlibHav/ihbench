@@ -1,0 +1,34 @@
+backend: hf
+# Cluster-local snapshot; avoids the ~12 GB Hub download.
+model: microsoft/Phi-4-multimodal-instruct
+torch_dtype: bfloat16
+device_map: auto
+temperature: 1.0
+max_new_tokens: 4096
+
+# ~5.6B params + adapters in bf16 (~12 GB) fits on a single A100-40GB.
+# 8-way data parallel for max throughput.
+gpus_per_replica: 1
+
+# Phi-4's modeling lives in trust_remote_code; the only extra runtime dep
+# is soundfile (loaded by our client) and the peft package that Phi-4's
+# custom modeling pulls in for its speech / vision LoRA adapters.
+#
+# IMPORTANT: pin transformers to 4.x. Phi-4's custom modeling code is
+# written against the transformers 4.x model-init pattern, and breaks on
+# 5.x with "Tensor.item() cannot be called on meta tensors" (the meta-
+# device init path changed). 4.48.2 is the floor recommended by the card;
+# we pin <5 to keep pip from auto-upgrading into the broken 5.x line.
+dependencies:
+  # Phi-4's model card pins EXACT versions for every dep — not ranges. The
+  # quick-start snippet only tests against transformers==4.48.2 (the version
+  # where Phi-4 was integrated). Newer 4.x lines pull in a torchao>=0.16
+  # version check on model load ('Found an incompatible version of torchao')
+  # that the model card's pinned environment never had to satisfy.
+  # Match the card's pinned requirements list verbatim.
+  - "transformers==4.48.2"
+  - "accelerate==1.3.0"
+  - "peft==0.13.2"
+  - "soundfile==0.13.1"
+  - "backoff==2.2.1"
+  - "scipy==1.15.2"

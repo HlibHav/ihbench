@@ -1,0 +1,6 @@
+backend: openai-realtime
+model: gpt-realtime-mini
+api_key: ${OPENAI_API_KEY}
+temperature: 1.0
+max_new_tokens: 4096
+max_workers: 8

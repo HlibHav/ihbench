@@ -1,0 +1,40 @@
+backend: hf
+# Cluster-local snapshot of the LM weights. The MiMo client also needs a
+# (already on the cluster); the client resolves it automatically.
+model: XiaomiMiMo/MiMo-Audio-7B-Instruct
+torch_dtype: bfloat16
+device_map: auto
+temperature: 1.0
+max_new_tokens: 4096
+
+# Match the Gemini convention: -nothinking config explicitly disables
+# the model's thinking block. The client pre-emits
+# "<think>\n\n</think>\n" before the assistant turn so the model skips
+# reasoning and goes straight to the final answer.
+client_kwargs:
+  thinking: false
+
+# 7B LM in bf16 (~14 GB) plus the ~1 GB MiMo-Audio-Tokenizer fits on a
+# single A100-40GB. 8-way data parallel on an 8-GPU node.
+gpus_per_replica: 1
+
+# MiMo-Audio is NOT pip-installable from GitHub (no setup.py); the client
+# Run once before launching this config:
+#     git clone https://github.com/XiaomiMiMo/MiMo-Audio.git \
+#
+# Dependencies below mirror MiMo's requirements.txt — transformers==4.49.0
+# is an EXACT pin (downgrades from the image's bundled 4.50+ on the smoke
+# run; that's intentional). flash-attn build can take a few minutes on the
+# first install.
+dependencies:
+  # MiMo's requirements.txt pins to its Python-3.12 dev env. Relax to ranges
+  # compatible with the container's Python 3.10 + bundled torch 2.6.
+  - "transformers==4.49.0"
+  - "accelerate>=1.9.0"
+  - "librosa>=0.10.0"
+  - "scipy>=1.10"             # MiMo asked for 1.16+; that requires Python 3.11+
+  # MiMo's modeling code imports flash_attn at top level — without it the
+  # SFT class fails. The source build doesn't work in the boson image
+  # (missing ninja / build isolation), so pin to the prebuilt wheel that
+  # matches the container's torch (2.6) + Python (3.10) + cxx11abi (False).
+  - "https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.6cxx11abiFALSE-cp310-cp310-linux_x86_64.whl"

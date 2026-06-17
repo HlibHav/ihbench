@@ -1,0 +1,39 @@
+backend: hf
+# Cluster-local snapshot (no HF_TOKEN / no ~24 GB re-download per launch).
+model: google/gemma-4-12b-it
+torch_dtype: bfloat16
+device_map: auto
+temperature: 1.0
+max_new_tokens: 2048
+
+# Gemma 4 exposes thinking via `enable_thinking` on apply_chat_template.
+# -nothinking disables the reasoning block (final answer only), matching the
+# Gemini / MiMo no-think convention. The client always runs
+# processor.parse_response() so the judge never sees raw <think> traces.
+client_kwargs:
+  thinking: false
+
+# 12B Unified in bf16: weights are ~24 GB, but with activations + KV cache for
+# IHBench's long multi-turn contexts (+ the caching-allocator warmup) a single
+# A100-40GB OOMs. Needs 2 GPUs (4-way data parallel x 2-way tensor parallel),
+# same as Voxtral-24B. Confirmed via smoke test (1 GPU -> CUDA OOM on 3/4 samples).
+gpus_per_replica: 2
+
+# Gemma 4's model classes (Gemma4UnifiedForConditionalGeneration,
+# AutoModelForMultimodalLM, processor.parse_response) ship in a recent
+# transformers; pin to main if the container image predates the Gemma-4
+# release. librosa is listed by the model card for the audio path.
+# (If the smoke test shows the classes are already in the image's transformers,
+#  drop the transformers entry to avoid an unnecessary reinstall.)
+dependencies:
+  - "transformers @ git+https://github.com/huggingface/transformers"
+  # transformers-main walks its full model registry on import; its Voxtral
+  # integration imports mistral_common...ReasoningEffort, which only exists in
+  # mistral_common>=1.8.5. The SLURM container ships an older version, so
+  # WITHOUT this pin transformers fails to import and EVERY sample fails with
+  # "cannot import name 'ReasoningEffort'". (Smoke passed only because the
+  # persistent enroot container already had a newer mistral_common from a
+  # prior Qwen3/Voxtral run.) See the add-hf-model skill pitfall notes.
+  - "mistral_common>=1.8.5"
+  - "librosa>=0.10.0"
+  - "accelerate>=1.9.0"

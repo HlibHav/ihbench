@@ -1,0 +1,7 @@
+backend: gemini
+model: gemini-3-flash-preview
+api_key: ${GEMINI_API_KEY}
+thinking_budget: 0
+temperature: 1.0
+max_new_tokens: 4096
+max_workers: 8
