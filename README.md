@@ -19,15 +19,16 @@ automatically; you do not need to download anything separately.
 ```bash
 git clone https://github.com/boson-ai/ihbench
 cd ihbench
-pip install -e .            # core (API models + judging)
+pip install -e ".[api]"     # OpenAI + Gemini API models and the judge
 ```
 
-Optional extras by what you want to run:
+Pick the extra that matches what you want to run:
 
 ```bash
+pip install -e .            # judging + OpenAI Chat models only
+pip install -e ".[api]"     # all API models (adds OpenAI Realtime + Gemini)
 pip install -e ".[hf]"      # add open-weight (HuggingFace) inference
-pip install -e ".[gemini]"  # add Google Gemini API models
-pip install -e ".[all]"     # everything
+pip install -e ".[all]"     # everything (API + HuggingFace)
 ```
 
 Set credentials (copy `.env.example` to `.env`):
