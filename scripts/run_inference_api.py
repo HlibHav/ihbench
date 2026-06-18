@@ -21,6 +21,8 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+from tqdm import tqdm
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Load .env from eval/ directory
@@ -165,7 +167,8 @@ def main():
     with open(output_path, "w") as fout:
         with ThreadPoolExecutor(max_workers=args.max_workers) as pool:
             futures = {pool.submit(run_sample, client, s, config, audio_dir): s for s in samples}
-            for future in as_completed(futures):
+            pbar = tqdm(as_completed(futures), total=len(futures), desc="Inference", unit="sample")
+            for future in pbar:
                 sample = futures[future]
                 try:
                     result = future.result()
@@ -173,10 +176,9 @@ def main():
                     fout.flush()
                     completed += 1
                 except Exception as e:
-                    print(f"  Failed {sample.id}: {e}", file=sys.stderr)
+                    tqdm.write(f"  Failed {sample.id}: {e}", file=sys.stderr)
                     failed += 1
-                if (completed + failed) % 50 == 0:
-                    print(f"  Progress: {completed} done, {failed} failed / {len(samples)} total", file=sys.stderr)
+                pbar.set_postfix(done=completed, failed=failed)
 
     print(f"\nDone. {completed} responses saved to {output_path}, {failed} failures.", file=sys.stderr)
 

@@ -34,6 +34,7 @@ import sys
 from pathlib import Path
 
 from openai import AsyncOpenAI
+from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -174,6 +175,7 @@ async def run_evaluation(
     tasks = [_bounded(sd, pred, bl) for sd, pred, bl in eval_pairs]
 
     with open(output_path, "w") as fout:
+        pbar = tqdm(total=total, desc="Judging", unit="sample")
         for coro in asyncio.as_completed(tasks):
             try:
                 result = await coro
@@ -182,9 +184,9 @@ async def run_evaluation(
                 fout.flush()
                 completed += 1
             except Exception as e:
-                _log.error("Evaluation failed: %s", e)
-            if completed % 50 == 0:
-                _log.info("Progress: %d / %d", completed, total)
+                tqdm.write(f"Evaluation failed: {e}")
+            pbar.update(1)
+        pbar.close()
 
     return results
 

@@ -13,6 +13,7 @@ dependencies = [
     "soundfile>=0.12",
     "datasets>=3.0",
     "torchcodec>=0.1",
+    "tqdm>=4.60",
 ]
 
 [project.optional-dependencies]

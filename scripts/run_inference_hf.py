@@ -31,6 +31,8 @@ import os
 import sys
 from pathlib import Path
 
+from tqdm import tqdm
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from dotenv import load_dotenv
@@ -211,15 +213,13 @@ def main():
 
     # Write shard results to temp file, then gather on main process
     shard_results = []
-    for i, sample in enumerate(shard):
+    for sample in tqdm(shard, desc=f"Inference (rank {rank})", unit="sample", disable=not is_main):
         try:
             effective_audio_dir = None if args.text_only else (args.audio_dir or hf_audio_cache)
             result = run_sample(client, sample, config, effective_audio_dir)
             shard_results.append(result)
         except Exception as e:
-            print(f"  [rank {rank}] Failed {sample.id}: {e}", file=sys.stderr)
-        if (i + 1) % 10 == 0 and is_main:
-            print(f"  Progress: {i + 1} / {len(shard)}", file=sys.stderr)
+            tqdm.write(f"  [rank {rank}] Failed {sample.id}: {e}", file=sys.stderr)
 
     # Gather results from all processes in memory via torch.distributed
     # all_gather_object on the GLOO group set up earlier. No temp shard
