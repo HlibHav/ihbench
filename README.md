@@ -12,7 +12,7 @@ automatically; you do not need to download anything separately.
 **Links**
 - Code: <https://github.com/boson-ai/ihbench>
 - Dataset: <https://huggingface.co/datasets/bosonai/ihbench> (`bosonai/ihbench`)
-- Paper: IHBench: Evaluating Post-Interruption Recovery in Voice Agents with Structured Workflows
+- Paper: [IHBench: Evaluating Post-Interruption Recovery in Voice Agents with Structured Workflows](https://arxiv.org/abs/2606.19595)
 
 ## Install
 
@@ -138,7 +138,7 @@ configs/            one YAML per evaluated model + the judge configs
   title         = {IHBench: Evaluating Post-Interruption Recovery in Voice Agents with Structured Workflows},
   author        = {Salimi, Ahmad and Ma, Wentao and Tang, Yuzhi and Shen, Dongming and Li, Mu and Smola, Alex},
   year          = {2026},
-  eprint        = {arXiv:TODO},
+  eprint        = {2606.19595},
   archivePrefix = {arXiv},
   primaryClass  = {cs.CL},
 }
