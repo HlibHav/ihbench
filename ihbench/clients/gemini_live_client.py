@@ -34,8 +34,8 @@ _PCM_CHUNK_BYTES = 2048
 _CHUNK_DELAY_S = 0.032
 
 
-def _wav_to_pcm16k_bytes(content: str) -> bytes:
-    """Read a WAV from a path or b64:// URI and return raw PCM16 bytes at 16kHz."""
+def _load_audio_16k(content: str) -> np.ndarray:
+    """Read a WAV (path or b64:// URI) -> float32 mono at 16kHz."""
     audio, sr = sf.read(io.BytesIO(load_audio_bytes(content)))
     if audio.ndim > 1:
         audio = audio.mean(axis=1)
@@ -43,7 +43,16 @@ def _wav_to_pcm16k_bytes(content: str) -> bytes:
         from scipy.signal import resample
         n_target = int(len(audio) * 16000 / sr)
         audio = resample(audio, n_target).astype(np.float32)
-    pcm16 = (np.clip(audio, -1.0, 1.0) * 32767).astype(np.int16)
+    return audio.astype(np.float32)
+
+
+def _wav_to_pcm16k_bytes(content: str) -> bytes:
+    """Read a WAV from a path or b64:// URI and return raw PCM16 bytes at 16kHz.
+
+    Used both for the streamed final turn and for seeding prior user turns as
+    inline-audio history (mime audio/pcm;rate=16000 -- the only audio format the
+    Live API's send_client_content history channel actually honors)."""
+    pcm16 = (np.clip(_load_audio_16k(content), -1.0, 1.0) * 32767).astype(np.int16)
     return pcm16.tobytes()
 
 
@@ -113,20 +122,32 @@ class GeminiLiveClient(APIClient):
                 last_audio_idx = i
                 break
 
-        # Build context turns (everything except the final audio message)
+        # Build context turns (everything except the final audio message, which
+        # is streamed below). IHBench/AMC tag EVERY user turn as audio, so prior
+        # user turns must be seeded as inline-audio Parts here -- earlier this
+        # loop did `if msg.type == "audio": continue`, which dropped every
+        # non-final user turn and left the model with assistant turns and no
+        # user side of the conversation (crushing memory / retention).
         context_turns = []
         for i, msg in enumerate(messages):
             if i == last_audio_idx:
                 continue
-            if msg.type == "audio":
-                continue
             role = "model" if msg.role == "assistant" else "user"
-            context_turns.append(
-                types.Content(
-                    role=role,
-                    parts=[types.Part(text=msg.content)],
+            if msg.type == "audio" and is_audio_content(msg.content):
+                # MUST be raw PCM (audio/pcm;rate=16000), NOT audio/wav: the Live
+                # API's send_client_content channel silently DROPS wav-mime audio
+                # history (verified by probe), but honors raw PCM -- same format
+                # the realtime streaming channel uses. (The regular non-Live
+                # Gemini API accepts audio/wav; Live does not.)
+                part = types.Part(
+                    inline_data=types.Blob(
+                        data=_wav_to_pcm16k_bytes(msg.content),
+                        mime_type="audio/pcm;rate=16000",
+                    )
                 )
-            )
+            else:
+                part = types.Part(text=msg.content)
+            context_turns.append(types.Content(role=role, parts=[part]))
 
         async with client.aio.live.connect(model=model, config=live_config) as session:
             # Seed conversation history.
@@ -189,7 +210,7 @@ class GeminiLiveClient(APIClient):
             #     reply/barge-in.
             # Waiting for `turn_complete` is what produced the production
             # empty-response rate (11.7% on gemini-3.1-flash-live) — any
-            # outer cutoff (WebSocket idle, SLURM step wall-time, network
+            # outer cutoff (WebSocket idle, job wall-time, network
             # blip) lands between the captured text and `turn_complete`,
             # and the in-progress text_parts is discarded when the
             # coroutine is cancelled.
