@@ -138,9 +138,13 @@ def analyse(log):
         else:
             if current_after is not None:
                 current_after.append(mtype)
+            audio_ids = {e["id"] for e in timeline if e["kind"] == "audio"}
             if mtype == "conversation.item.added" and pending_text:
                 item = msg.get("item") or {}
-                pending_text.pop(0)["id"] = item.get("id")
+                # A committed audio item is also announced with conversation.item.added,
+                # after its input_audio_buffer.committed; it is not a text-item ack.
+                if item.get("id") not in audio_ids:
+                    pending_text.pop(0)["id"] = item.get("id")
             elif mtype == "input_audio_buffer.committed":
                 audio_entries = [e for e in timeline if e["kind"] == "audio"]
                 audio_entries[committed_seen]["id"] = msg.get("item_id")
