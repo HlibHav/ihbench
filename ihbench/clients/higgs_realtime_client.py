@@ -32,6 +32,7 @@ from ihbench.clients.openai_realtime_client import _wav_to_pcm24k_b64
 
 URL = "wss://api.boson.ai/v1/realtime"
 ATTEMPT_TIMEOUT_S = 60.0
+CLOSE_TIMEOUT_S = 1.0  # bounds the close handshake so a timed-out attempt ends promptly (AC-21)
 LOG_PREFIX = "higgs-realtime attempt failed:"
 MAX_APPEND_B64_CHARS = 1_048_576  # 1 MiB of base64 per input_audio_buffer.append
 _KEY_ENV = "BOSON_API_KEY"
@@ -119,22 +120,33 @@ class HiggsRealtimeClient(APIClient):
 
     # ------------------------------------------------------------------ wire
 
+    @staticmethod
+    def _closed_error(
+        e: websockets.exceptions.ConnectionClosed, before: str, state: dict
+    ) -> HiggsRealtimeError:
+        """Failure for a closed socket. Names the close code only, never the reason text."""
+        terminal = state.get("terminal")
+        if terminal:
+            cause = f"after {terminal}"
+        elif e.rcvd is not None:
+            cause = f"close code {e.rcvd.code}"
+        else:
+            cause = "no close frame"
+        return HiggsRealtimeError(f"{LOG_PREFIX} connection closed before {before} ({cause})")
+
+    async def _send(self, ws: Any, event: dict, before: str, state: dict) -> None:
+        try:
+            await ws.send(json.dumps(event))
+        except websockets.exceptions.ConnectionClosed as e:
+            raise self._closed_error(e, before, state) from None
+
     async def _wait_for(self, ws: Any, event_type: str, state: dict) -> dict:
         """Read events until one of ``event_type`` arrives; ignore unknown ones."""
         while True:
             try:
                 raw = await ws.recv()
             except websockets.exceptions.ConnectionClosed as e:
-                terminal = state.get("terminal")
-                if terminal:
-                    cause = f"after {terminal}"
-                elif e.rcvd is not None:
-                    cause = f"close code {e.rcvd.code}"
-                else:
-                    cause = "no close frame"
-                raise HiggsRealtimeError(
-                    f"{LOG_PREFIX} connection closed before {event_type} ({cause})"
-                ) from None
+                raise self._closed_error(e, event_type, state) from None
             try:
                 event = json.loads(raw)
             except (TypeError, ValueError):
@@ -167,24 +179,29 @@ class HiggsRealtimeClient(APIClient):
         state: dict[str, Any] = {"text": [], "collect": False}
         async with AsyncExitStack() as stack:
             try:
-                ws = await stack.enter_async_context(websockets.connect(URL, **{kwarg: headers}))
+                ws = await stack.enter_async_context(websockets.connect(URL, close_timeout=CLOSE_TIMEOUT_S, **{kwarg: headers}))
             except Exception as e:
                 raise HiggsRealtimeError(f"{LOG_PREFIX} connection failed: {type(e).__name__}") from None
 
-            await ws.send(json.dumps(self._session_update(system_message, config)))
+            await self._send(ws, self._session_update(system_message, config), "session.created", state)
             await self._wait_for(ws, "session.created", state)  # never session.updated (F14)
 
             for kind, payload in steps:
                 if kind == "audio":
                     for chunk in payload:
-                        await ws.send(json.dumps({"type": "input_audio_buffer.append", "audio": chunk}))
-                    await ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
+                        await self._send(
+                            ws, {"type": "input_audio_buffer.append", "audio": chunk},
+                            "input_audio_buffer.committed", state,
+                        )
+                    await self._send(ws, {"type": "input_audio_buffer.commit"}, "input_audio_buffer.committed", state)
                     await self._wait_for(ws, "input_audio_buffer.committed", state)
                 else:
-                    await ws.send(json.dumps({"type": "conversation.item.create", "item": payload}))
+                    await self._send(
+                        ws, {"type": "conversation.item.create", "item": payload}, "response.done", state
+                    )
 
             state["collect"] = True
-            await ws.send(json.dumps({"type": "response.create"}))
+            await self._send(ws, {"type": "response.create"}, "response.done", state)
             done = await self._wait_for(ws, "response.done", state)
 
         response = done.get("response")
