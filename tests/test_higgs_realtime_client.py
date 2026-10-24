@@ -305,7 +305,7 @@ def test_handshake_bearer_header_no_key_in_url(client_module, rec):
     assert url == URL
     assert SENTINEL not in url
     kwarg = client_module._headers_kwarg(importlib.metadata.version("websockets"))
-    assert kwargs == {kwarg: {"Authorization": f"Bearer {SENTINEL}"}}
+    assert kwargs == {kwarg: {"Authorization": f"Bearer {SENTINEL}"}, "close_timeout": 1.0}
 
 
 @pytest.mark.parametrize("key", [None, "", "   ", "${BOSON_API_KEY}"], ids=["unset", "empty", "blank", "placeholder"])
@@ -320,7 +320,8 @@ def test_key_falls_back_to_env(client_module, rec, monkeypatch):
     monkeypatch.setenv("BOSON_API_KEY", SENTINEL)
     client = client_module.HiggsRealtimeClient("higgs-realtime")
     client.generate("SYS", [user_text("hi")], GenerationConfig())
-    assert list(rec.calls[0][1].values())[0] == {"Authorization": f"Bearer {SENTINEL}"}
+    kwarg = client_module._headers_kwarg(importlib.metadata.version("websockets"))
+    assert rec.calls[0][1][kwarg] == {"Authorization": f"Bearer {SENTINEL}"}
 
 
 def test_headers_kwarg_by_version(client_module):
