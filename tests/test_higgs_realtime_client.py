@@ -577,6 +577,58 @@ def test_attempt_timeout_closes_and_fails(client_module, rec, caplog):
     assert len(records) == 1 and "timeout" in records[0].getMessage()
 
 
+class SendClosesScript(Script):
+    """Server closes the socket while the client is still sending (reason text is attacker-shaped)."""
+
+    def __init__(self, on_type, reason):
+        super().__init__()
+        self.on_type = on_type
+        self.reason = reason
+
+    def __call__(self, msg):
+        if msg.get("type") == self.on_type:
+            rcvd = websockets.frames.Close(1013, self.reason)
+            raise websockets.exceptions.ConnectionClosedError(rcvd, None)
+        return super().__call__(msg)
+
+
+@pytest.mark.parametrize("on_type", ["conversation.item.create", "response.create"])
+def test_close_during_send_is_a_logged_attempt_failure(client_module, rec, caplog, capsys, on_type):
+    rec.react = SendClosesScript(on_type, f"reason {SENTINEL}")
+    with pytest.raises(client_module.HiggsRealtimeError) as ei:
+        generate(client_module, [user_text("q")])
+    assert "1013" in str(ei.value)
+    assert SENTINEL not in str(ei.value)
+    records = failed_records(caplog)
+    assert len(records) == 1 and "1013" in records[0].getMessage()
+    out = capsys.readouterr()
+    assert SENTINEL not in caplog.text + out.out + out.err
+
+
+def test_connect_bounds_the_close_handshake(client_module, rec):
+    generate(client_module, [user_text("q")])
+    assert rec.calls[0][1].get("close_timeout") == 1.0
+
+
+def test_timeout_attempt_is_bounded_when_close_is_slow(client_module, monkeypatch, caplog):
+    """A peer that never answers the close frame must not stretch the attempt past timeout + ~2 s."""
+    class SlowClose(FakeConnection):
+        async def __aexit__(self, *exc):
+            await asyncio.sleep(self.close_timeout)  # websockets waits this long for the peer
+            return await super().__aexit__(*exc)
+
+    def connect(url, **kwargs):
+        conn = SlowClose(Script(response_events=[delta("never done")]))
+        conn.close_timeout = kwargs.get("close_timeout", 10.0)  # websockets default is 10 s
+        return conn
+
+    monkeypatch.setattr(websockets, "connect", connect)
+    t0 = time.monotonic()
+    with pytest.raises(client_module.HiggsRealtimeError):
+        generate(client_module, [user_text("q")], attempt_timeout_s=0.5)
+    assert time.monotonic() - t0 < 0.5 + 2.0
+
+
 def test_handshake_failure_is_logged_without_key(client_module, rec, caplog):
     rec.enter_exc = OSError(f"boom {SENTINEL}")
     with pytest.raises(client_module.HiggsRealtimeError) as ei:
